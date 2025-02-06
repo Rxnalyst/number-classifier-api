@@ -7,11 +7,16 @@ app = FastAPI()
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
-    allow_methods=["*"],  
-    allow_headers=["*"],  
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
 )
+
+# Root endpoint to avoid "Not Found" error
+@app.get("/")
+def root():
+    return {"message": "Welcome to the Number Classification API! Use /api/classify-number?number=7"}
 
 # Helper functions
 def is_prime(n: int) -> bool:
@@ -34,28 +39,25 @@ def get_digit_sum(n: int) -> int:
 
 def get_fun_fact(n: int) -> str:
     try:
-        response = requests.get(f"http://numbersapi.com/{n}/math?json")
+        response = requests.get(f"http://numbersapi.com/{n}/math?json", timeout=5)
+        response.raise_for_status()  # Raise error for failed requests
         return response.json().get("text", "No fact available.")
-    except:
-        return "No fact available."
+    except requests.exceptions.RequestException:
+        return "No fun fact available due to a network issue."
 
+# Main API endpoint
 @app.get("/api/classify-number")
-def classify_number(number: int = Query(..., description="The number to classify")):
-    try:
-        num = int(number)
-    except ValueError:
-        return {"number": number, "error": True}
-
+def classify_number(number: int = Query(..., description="The number to classify", example=7)):
     properties = []
-    if is_armstrong(num):
+    if is_armstrong(number):
         properties.append("armstrong")
-    properties.append("odd" if num % 2 != 0 else "even")
+    properties.append("odd" if number % 2 != 0 else "even")
 
     return {
-        "number": num,
-        "is_prime": is_prime(num),
-        "is_perfect": is_perfect(num),
+        "number": number,
+        "is_prime": is_prime(number),
+        "is_perfect": is_perfect(number),
         "properties": properties,
-        "digit_sum": get_digit_sum(num),
-        "fun_fact": get_fun_fact(num),
+        "digit_sum": get_digit_sum(number),
+        "fun_fact": get_fun_fact(number),
     }
