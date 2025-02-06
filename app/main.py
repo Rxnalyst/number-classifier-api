@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 
@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-# Root endpoint to avoid "Not Found" error
+# Root endpoint
 @app.get("/")
 def root():
     return {"message": "Welcome to the Number Classification API! Use /api/classify-number?number=7"}
@@ -31,11 +31,11 @@ def is_perfect(n: int) -> bool:
     return n > 1 and sum(i for i in range(1, n) if n % i == 0) == n
 
 def is_armstrong(n: int) -> bool:
-    digits = [int(d) for d in str(n)]
-    return sum(d ** len(digits) for d in digits) == n
+    digits = [int(d) for d in str(abs(n))]  # Handle negative numbers properly
+    return sum(d ** len(digits) for d in digits) == abs(n)
 
 def get_digit_sum(n: int) -> int:
-    return sum(int(d) for d in str(n))
+    return sum(int(d) for d in str(abs(n)))  # Handle negative numbers properly
 
 def get_fun_fact(n: int) -> str:
     try:
@@ -48,12 +48,16 @@ def get_fun_fact(n: int) -> str:
 # Main API endpoint
 @app.get("/api/classify-number")
 def classify_number(number: int = Query(..., description="The number to classify", example=7)):
+    # Ensure input is an integer (FastAPI already enforces this)
+    if not isinstance(number, int):
+        raise HTTPException(status_code=400, detail="Invalid input. Must be an integer.")
+
     properties = []
     if is_armstrong(number):
         properties.append("armstrong")
     properties.append("odd" if number % 2 != 0 else "even")
 
-    return {
+    response = {
         "number": number,
         "is_prime": is_prime(number),
         "is_perfect": is_perfect(number),
@@ -61,3 +65,5 @@ def classify_number(number: int = Query(..., description="The number to classify
         "digit_sum": get_digit_sum(number),
         "fun_fact": get_fun_fact(number),
     }
+
+    return response
