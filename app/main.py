@@ -1,74 +1,56 @@
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Union
-import math
+from fastapi import FastAPI, Query
+import requests
 
 app = FastAPI()
 
-# Enable CORS for frontend communication
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class NumberResponse(BaseModel):
-    number: Union[int, float]
-    is_prime: bool
-    is_perfect: bool
-    properties: List[str]
-    digit_sum: int
-    fun_fact: str
-
-def is_prime(n: int) -> bool:
-    """Check if a number is prime."""
+def is_prime(n):
     if n < 2:
         return False
-    for i in range(2, int(math.sqrt(n)) + 1):
+    for i in range(2, int(n ** 0.5) + 1):
         if n % i == 0:
             return False
     return True
 
-def is_perfect(n: int) -> bool:
-    """Check if a number is a perfect number."""
-    if n <= 0:
-        return False
-    return sum(i for i in range(1, n) if n % i == 0) == n
+def is_perfect(n):
+    return n > 0 and sum(i for i in range(1, n) if n % i == 0) == n
 
-def get_number_properties(n: int) -> List[str]:
-    """Get properties of the number."""
-    properties = ["even" if n % 2 == 0 else "odd"]
-    if is_prime(n):
+def is_armstrong(n):
+    digits = [int(d) for d in str(n)]
+    power = len(digits)
+    return sum(d ** power for d in digits) == n
+
+def sum_of_digits(n):
+    return sum(int(digit) for digit in str(n))
+
+@app.get("/api/classify-number")
+async def classify_number(number: str = Query(..., description="The number to classify")):
+    if not number.isdigit():
+        return {"number": number, "error": True}
+
+    num = int(number)
+    properties = []
+    
+    if num % 2 == 0:
+        properties.append("even")
+    else:
+        properties.append("odd")
+
+    if is_prime(num):
         properties.append("prime")
-    return properties
 
-def get_fun_fact(n: int) -> str:
-    """Generate a fun fact about the number."""
-    return f"{n} is a unique number with special properties."
+    if is_perfect(num):
+        properties.append("perfect")
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to the Number Classification API!"}
+    if is_armstrong(num):
+        properties.append("armstrong")
 
-@app.get("/api/classify-number", response_model=NumberResponse)
-async def classify_number(number: Union[int, float] = Query(..., description="The number to classify")):
-    try:
-        response_data = {
-            "number": number,
-            "is_prime": is_prime(int(number)),
-            "is_perfect": is_perfect(int(number)),
-            "properties": get_number_properties(int(number)),
-            "digit_sum": sum(map(int, str(abs(int(number))))),
-            "fun_fact": get_fun_fact(int(number)),
-        }
-        return response_data
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid number format")
+    fun_fact = requests.get(f"http://numbersapi.com/{num}").text
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Render deployment."""
-    return {"status": "ok"}
+    return {
+        "number": num,
+        "is_prime": is_prime(num),
+        "is_perfect": is_perfect(num),
+        "properties": properties,
+        "class_sum": sum_of_digits(num),
+        "fun_fact": fun_fact
+    }
