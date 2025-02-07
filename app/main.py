@@ -1,37 +1,17 @@
 from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from typing import List, Union
 
 app = FastAPI()
 
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class NumberClassificationResponse(BaseModel):
-    number: int
+class NumberResponse(BaseModel):
+    number: Union[int, float]
     is_prime: bool
     is_perfect: bool
-    properties: list[str]
+    properties: List[str]
     digit_sum: int
     fun_fact: str
 
-@app.get("/")
-def root():
-    return {"message": "Welcome to the Number Classification API! Use /api/classify-number?number=7"}
-
-# Helper functions
 def is_prime(n: int) -> bool:
     if n < 2:
         return False
@@ -41,45 +21,34 @@ def is_prime(n: int) -> bool:
     return True
 
 def is_perfect(n: int) -> bool:
-    return n > 1 and sum(i for i in range(1, n) if n % i == 0) == n
+    if n <= 0:
+        return False
+    return sum(i for i in range(1, n) if n % i == 0) == n
 
-def is_armstrong(n: int) -> bool:
-    digits = [int(d) for d in str(abs(n))]
-    return sum(d ** len(digits) for d in digits) == abs(n)
-
-def get_digit_sum(n: int) -> int:
-    return sum(int(d) for d in str(abs(n)))
+def get_number_properties(n: int) -> List[str]:
+    properties = ["even" if n % 2 == 0 else "odd"]
+    if is_prime(n):
+        properties.append("prime")
+    return properties
 
 def get_fun_fact(n: int) -> str:
+    return f"{n} is a special number."
+
+@app.get("/api/classify-number", response_model=NumberResponse)
+async def classify_number(number: str = Query(..., description="The number to classify")):
     try:
-        response = requests.get(f"http://numbersapi.com/{n}/math?json", timeout=5)
-        response.raise_for_status()
-        return response.json().get("text", "No fact available.")
-    except requests.exceptions.RequestException:
-        return "No fun fact available due to a network issue."
+        number = float(number)  # Convert input to float
+        number_int = int(number) if number.is_integer() else number  # Convert to int if whole number
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid number input")
 
-@app.get("/api/classify-number", response_model=NumberClassificationResponse)
-def classify_number(number: int = Query(..., description="The number to classify")):
-    logger.info(f"Received request with number: {number}")
-
-    # Validate input: Ensure number is an integer
-    if not isinstance(number, int):
-        logger.error("Invalid input: Not an integer")
-        raise HTTPException(status_code=400, detail="Invalid input. Must be an integer.")
-
-    properties = []
-    if is_armstrong(number):
-        properties.append("armstrong")
-    properties.append("odd" if number % 2 != 0 else "even")
-
-    response = {
+    response_data = {
         "number": number,
-        "is_prime": is_prime(number),
-        "is_perfect": is_perfect(number),
-        "properties": properties,
-        "digit_sum": get_digit_sum(number),
-        "fun_fact": get_fun_fact(number),
+        "is_prime": is_prime(number_int),
+        "is_perfect": is_perfect(number_int),
+        "properties": get_number_properties(number_int),
+        "digit_sum": sum(map(int, str(abs(number_int)))),
+        "fun_fact": get_fun_fact(number_int),
     }
 
-    logger.info(f"Response: {response}")
-    return response
+    return response_data  # FastAPI automatically converts this to JSON
