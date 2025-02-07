@@ -1,7 +1,11 @@
-import json
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
 import math
+import json
 
-def is_prime(n):
+app = FastAPI()
+
+def is_prime(n: int) -> bool:
     """Check if a number is prime."""
     if n < 2:
         return False
@@ -10,7 +14,7 @@ def is_prime(n):
             return False
     return True
 
-def is_perfect(n):
+def is_perfect(n: int) -> bool:
     """Check if a number is a perfect number."""
     if n < 2:
         return False
@@ -22,23 +26,23 @@ def is_perfect(n):
                 sum_divisors += n // i
     return sum_divisors == n
 
-def is_armstrong(n):
+def is_armstrong(n: int) -> bool:
     """Check if a number is an Armstrong number."""
     digits = [int(d) for d in str(abs(n))]
     length = len(digits)
     return sum(d ** length for d in digits) == abs(n)
 
-def digit_sum(n):
+def digit_sum(n: int) -> int:
     """Calculate the sum of digits of a number."""
     return sum(int(d) for d in str(abs(n)))
 
-def get_fun_fact(n):
+def get_fun_fact(n: int) -> str:
     """Generate a fun fact about a number."""
     if is_armstrong(n):
         return f"{n} is an Armstrong number because {' + '.join([f'{d}^{len(str(abs(n)))}' for d in str(abs(n))])} = {n}"
     return f"{n} is a fascinating number with unique properties."
 
-def classify_properties(n):
+def classify_properties(n: int):
     """Classify number properties (armstrong, odd, even)."""
     properties = []
     if is_armstrong(n):
@@ -49,23 +53,12 @@ def classify_properties(n):
         properties.append("odd")
     return properties
 
-def lambda_handler(event, context):
+@app.get("/api/classify-number")
+def classify_number(number: str = Query(..., description="The number to classify")):
     try:
-        print("🔍 Received event:", json.dumps(event))  # Log incoming request
-
-        query_params = event.get("queryStringParameters", {})
-
-        if not query_params or "number" not in query_params:
-            print("❌ ERROR: Missing number parameter")
-            return create_response(400, {"error": "Missing number parameter"})
-
-        number_str = query_params.get("number")
-        print("📌 Extracted number:", number_str)  # Log extracted number
-
         try:
-            number = float(number_str)  # Convert input to float
+            number = float(number)  # Convert input to float
         except ValueError:
-            print("❌ ERROR: Invalid number format:", number_str)
             return create_response(400, {"error": "Invalid number format"})
 
         is_whole = number.is_integer()
@@ -78,7 +71,7 @@ def lambda_handler(event, context):
                 "is_prime": False,
                 "is_perfect": False,
                 "properties": ["odd" if int_number % 2 != 0 else "even"],
-                "digit_sum": int(digit_sum(abs(int_number))),
+                "digit_sum": digit_sum(abs(int_number)),
                 "fun_fact": f"{number} is a negative number with unique properties."
             }
             return create_response(200, response)
@@ -90,7 +83,7 @@ def lambda_handler(event, context):
                 "is_prime": is_prime(int_number) if int_number > 0 else False,
                 "is_perfect": is_perfect(int_number) if int_number > 0 else False,
                 "properties": classify_properties(int_number),
-                "digit_sum": int(digit_sum(abs(int_number))),
+                "digit_sum": digit_sum(abs(int_number)),
                 "fun_fact": get_fun_fact(int_number)
             }
         else:
@@ -99,15 +92,13 @@ def lambda_handler(event, context):
                 "is_prime": False,
                 "is_perfect": False,
                 "properties": [],
-                "digit_sum": int(digit_sum(int(number))),
+                "digit_sum": digit_sum(int(number)),
                 "fun_fact": f"{number} is a real number with unique properties."
             }
 
-        print("✅ SUCCESS: Returning response:", response)  # Log final response
         return create_response(200, response)
 
     except Exception as e:
-        print("❌ ERROR: Internal server error:", str(e))
         return create_response(500, {"error": "Internal server error", "message": str(e)})
 
 def create_response(status_code, body):
