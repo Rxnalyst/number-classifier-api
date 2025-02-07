@@ -1,7 +1,29 @@
-import json
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Union
 import math
 
-def is_prime(n):
+app = FastAPI()
+
+# Enable CORS for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class NumberResponse(BaseModel):
+    number: Union[int, float]
+    is_prime: bool
+    is_perfect: bool
+    properties: List[str]
+    digit_sum: int
+    fun_fact: str
+
+def is_prime(n: int) -> bool:
     """Check if a number is prime."""
     if n < 2:
         return False
@@ -10,103 +32,43 @@ def is_prime(n):
             return False
     return True
 
-def is_perfect(n):
+def is_perfect(n: int) -> bool:
     """Check if a number is a perfect number."""
-    if n < 2:
+    if n <= 0:
         return False
-    sum_divisors = 1
-    for i in range(2, int(math.sqrt(n)) + 1):
-        if n % i == 0:
-            sum_divisors += i
-            if i != n // i:
-                sum_divisors += n // i
-    return sum_divisors == n
+    return sum(i for i in range(1, n) if n % i == 0) == n
 
-def is_armstrong(n):
-    """Check if a number is an Armstrong number."""
-    digits = [int(d) for d in str(abs(n))]
-    length = len(digits)
-    return sum(d ** length for d in digits) == abs(n)
-
-def digit_sum(n):
-    """Calculate the sum of digits of a number."""
-    return sum(int(d) for d in str(abs(n)))
-
-def get_fun_fact(n):
-    """Generate a fun fact about a number."""
-    if is_armstrong(n):
-        return f"{n} is an Armstrong number because {' + '.join([f'{d}^{len(str(abs(n)))}' for d in str(abs(n))])} = {n}"
-    return f"{n} is a fascinating number with unique properties."
-
-def classify_properties(n):
-    """Classify number properties (armstrong, odd, even)."""
-    properties = []
-    if is_armstrong(n):
-        properties.append("armstrong")
-    if n % 2 == 0:
-        properties.append("even")
-    else:
-        properties.append("odd")
+def get_number_properties(n: int) -> List[str]:
+    """Get properties of the number."""
+    properties = ["even" if n % 2 == 0 else "odd"]
+    if is_prime(n):
+        properties.append("prime")
     return properties
 
+def get_fun_fact(n: int) -> str:
+    """Generate a fun fact about the number."""
+    return f"{n} is a unique number with special properties."
 
-def lambda_handler(event, context):
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Number Classification API!"}
+
+@app.get("/api/classify-number", response_model=NumberResponse)
+async def classify_number(number: Union[int, float] = Query(..., description="The number to classify")):
     try:
-        print("🔍 Received event:", json.dumps(event))  # Log incoming request
+        response_data = {
+            "number": number,
+            "is_prime": is_prime(int(number)),
+            "is_perfect": is_perfect(int(number)),
+            "properties": get_number_properties(int(number)),
+            "digit_sum": sum(map(int, str(abs(int(number))))),
+            "fun_fact": get_fun_fact(int(number)),
+        }
+        return response_data
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid number format")
 
-        query_params = event.get("queryStringParameters", {})
-
-        if not query_params or "number" not in query_params:
-            print("❌ ERROR: Missing number parameter")
-            return create_response(400, {"number": None, "error": "Missing number parameter"})
-
-        number_str = query_params.get("number")
-        print("📌 Extracted number:", number_str)  # Log extracted number
-
-        try:
-            number = float(number_str)  # Convert input to float
-        except ValueError:
-            print("❌ ERROR: Invalid number format:", number_str)
-            return create_response(400, {"number": number_str, "error": "Invalid number format"})
-
-        is_whole = number.is_integer()
-        int_number = int(number) if is_whole else None
-
-        if is_whole:  # ✅ Whole numbers (including negative)
-            response = {
-                "number": number,
-                "is_prime": is_prime(int_number) if int_number > 0 else False,
-                "is_perfect": is_perfect(int_number) if int_number > 0 else False,
-                "properties": classify_properties(int_number),
-                "digit_sum": digit_sum(abs(int_number)),  # ✅ Ensure digit sum is always a number
-                "fun_fact": get_fun_fact(int_number) if int_number > 0 else f"{number} is a negative number with unique properties."
-            }
-        else:  # ✅ Floating-Point Numbers
-            response = {
-                "number": number,
-                "is_prime": False,
-                "is_perfect": False,
-                "properties": [],
-                "digit_sum": digit_sum(int(number)),  # ✅ Convert float to integer for digit sum
-                "fun_fact": f"{number} is a real number with unique properties."
-            }
-
-        print("✅ SUCCESS: Returning response:", response)  # Log final response
-        return create_response(200, response)
-
-    except Exception as e:
-        print("❌ ERROR: Internal server error:", str(e))
-        return create_response(500, {"number": None, "error": "Internal server error", "message": str(e)})
-
-
-def create_response(status_code, body):
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-            "Access-Control-Allow-Methods": "GET"
-        },
-        "body": json.dumps(body)
-    }
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render deployment."""
+    return {"status": "ok"}
