@@ -1,19 +1,32 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import requests
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Root endpoint
+class NumberClassificationResponse(BaseModel):
+    number: int
+    is_prime: bool
+    is_perfect: bool
+    properties: list[str]
+    digit_sum: int
+    fun_fact: str
+
 @app.get("/")
 def root():
     return {"message": "Welcome to the Number Classification API! Use /api/classify-number?number=7"}
@@ -31,25 +44,27 @@ def is_perfect(n: int) -> bool:
     return n > 1 and sum(i for i in range(1, n) if n % i == 0) == n
 
 def is_armstrong(n: int) -> bool:
-    digits = [int(d) for d in str(abs(n))]  # Handle negative numbers properly
+    digits = [int(d) for d in str(abs(n))]
     return sum(d ** len(digits) for d in digits) == abs(n)
 
 def get_digit_sum(n: int) -> int:
-    return sum(int(d) for d in str(abs(n)))  # Handle negative numbers properly
+    return sum(int(d) for d in str(abs(n)))
 
 def get_fun_fact(n: int) -> str:
     try:
         response = requests.get(f"http://numbersapi.com/{n}/math?json", timeout=5)
-        response.raise_for_status()  # Raise error for failed requests
+        response.raise_for_status()
         return response.json().get("text", "No fact available.")
     except requests.exceptions.RequestException:
         return "No fun fact available due to a network issue."
 
-# Main API endpoint
-@app.get("/api/classify-number")
-def classify_number(number: int = Query(..., description="The number to classify", example=7)):
-    # Ensure input is an integer (FastAPI already enforces this)
+@app.get("/api/classify-number", response_model=NumberClassificationResponse)
+def classify_number(number: int = Query(..., description="The number to classify")):
+    logger.info(f"Received request with number: {number}")
+
+    # Validate input: Ensure number is an integer
     if not isinstance(number, int):
+        logger.error("Invalid input: Not an integer")
         raise HTTPException(status_code=400, detail="Invalid input. Must be an integer.")
 
     properties = []
@@ -66,4 +81,5 @@ def classify_number(number: int = Query(..., description="The number to classify
         "fun_fact": get_fun_fact(number),
     }
 
+    logger.info(f"Response: {response}")
     return response
