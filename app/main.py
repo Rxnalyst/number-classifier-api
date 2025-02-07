@@ -5,7 +5,7 @@ from typing import List, Union
 app = FastAPI()
 
 class NumberResponse(BaseModel):
-    number: Union[int, float]
+    number: Union[int, float, str]
     is_prime: bool
     is_perfect: bool
     properties: List[str]
@@ -40,7 +40,14 @@ async def classify_number(number: str = Query(..., description="The number to cl
         number = float(number)  # Convert input to float
         number_int = int(number) if number.is_integer() else number  # Convert to int if whole number
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid number input")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "number": number,  # Show the invalid input
+                "error": "Invalid number input",
+                "message": "Please provide a valid integer or floating-point number."
+            }
+        )
 
     response_data = {
         "number": number,
@@ -51,4 +58,4 @@ async def classify_number(number: str = Query(..., description="The number to cl
         "fun_fact": get_fun_fact(number_int),
     }
 
-    return response_data  # FastAPI automatically converts this to JSON
+    return response_data  # FastAPI will handle JSON conversion
